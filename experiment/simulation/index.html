@@ -1,13 +1,292 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-	<!-- Add CSS at the head of HTML file -->
-    <link rel="stylesheet" href="./css/main.css">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Transformer Oil Breakdown Testing - 3D Virtual Lab</title>
+<style>
+  :root { --bg:#07111f; --panel:#101f33; --line:#243c58; --text:#eaf4ff; --muted:#9db1c9; --cyan:#43d9ff; --amber:#ffbd59; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:Arial,Helvetica,sans-serif; background:radial-gradient(circle at top,#132b46,#07111f 55%); color:var(--text); }
+  header { padding:22px 18px 12px; text-align:center; }
+  header h1 { margin:0 0 8px; font-size:clamp(22px,3vw,34px); letter-spacing:.3px; }
+  header p { margin:0; color:var(--muted); font-size:14px; }
+  .layout { width:min(1250px,96%); margin:14px auto 28px; display:grid; grid-template-columns:minmax(0,1.6fr) minmax(280px,.9fr); gap:16px; }
+  .panel { background:linear-gradient(160deg,rgba(20,39,62,.96),rgba(10,24,41,.96)); border:1px solid var(--line); border-radius:16px; overflow:hidden; box-shadow:0 16px 40px #0003; }
+  .panel-title { padding:14px 16px; border-bottom:1px solid var(--line); font-weight:700; display:flex; align-items:center; justify-content:space-between; gap:10px; }
+  .tag { color:#8eeaff; background:#123b50; border:1px solid #1b6077; border-radius:99px; padding:5px 9px; font-size:11px; white-space:nowrap; }
+  #scene { width:100%; height:470px; display:block; background:radial-gradient(ellipse at center,#142d49,#081321 72%); }
+  .scene-help { color:var(--muted); font-size:12px; padding:0 15px 14px; }
+  .controls { padding:16px; display:grid; gap:15px; }
+  .control-label { display:flex; justify-content:space-between; gap:12px; font-size:13px; margin-bottom:8px; color:#d8e8f8; }
+  input[type=range] { width:100%; accent-color:var(--cyan); cursor:pointer; }
+  .buttons { display:flex; flex-wrap:wrap; gap:9px; }
+  button { border:0; border-radius:9px; padding:11px 14px; font-weight:700; cursor:pointer; color:#04111c; background:var(--cyan); }
+  button.secondary { color:var(--text); background:#243b56; border:1px solid #385675; }
+  button:disabled { opacity:.5; cursor:not-allowed; }
+  .readings { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  .reading { background:#0a1728; border:1px solid #203853; padding:13px; border-radius:11px; }
+  .reading small { color:var(--muted); display:block; font-size:11px; margin-bottom:7px; }
+  .reading strong { font-size:22px; }
+  .status { padding:11px 12px; border-radius:9px; background:#102e3a; border:1px solid #1d5b69; color:#9deeff; font-size:13px; line-height:1.45; }
+  .status.warn { background:#352819; border-color:#765328; color:#ffd49a; }
+  .chart-wrap { padding:10px 14px 14px; }
+  canvas#chart { width:100%; height:190px; display:block; }
+  .table-wrap { overflow-x:auto; }
+  table { width:100%; border-collapse:collapse; font-size:12px; }
+  th,td { text-align:left; padding:10px 12px; border-bottom:1px solid #203650; white-space:nowrap; }
+  th { color:#9db1c9; font-weight:600; }
+  .note { width:min(1250px,96%); margin:0 auto 28px; color:#9db1c9; font-size:12px; line-height:1.55; }
+  .note strong { color:#ffd49a; }
+  @media(max-width:800px) { .layout { grid-template-columns:1fr; } #scene { height:360px; } }
+</style>
 </head>
 <body>
-		<!-- Your code goes here-->
+<header>
+  <h1>Transformer Oil Breakdown Testing</h1>
+  <p>3D Virtual Sphere-Gap Lab · Educational Simulation</p>
+</header>
 
-	<!-- Add JS at the bottom of HTML file --> 
-        <script src="./js/main.js"></script>
+<main class="layout">
+  <section class="panel">
+    <div class="panel-title"><span>3D Test Chamber</span><span class="tag">DRAG TO ROTATE</span></div>
+    <canvas id="scene"></canvas>
+    <div class="scene-help">Drag to rotate · Scroll to zoom · The blue liquid represents insulating oil. The two metal spheres form the electrode gap.</div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-title"><span>Experiment Controls</span><span class="tag">SIMULATED</span></div>
+    <div class="controls">
+      <div>
+        <div class="control-label"><label for="voltage">Applied voltage</label><strong><span id="voltageText">0</span> kV</strong></div>
+        <input id="voltage" type="range" min="0" max="80" value="0" step="1">
+      </div>
+      <div>
+        <div class="control-label"><label for="gap">Electrode gap</label><strong><span id="gapText">2.5</span> mm</strong></div>
+        <input id="gap" type="range" min="1" max="5" value="2.5" step="0.5">
+      </div>
+      <div class="buttons">
+        <button id="start">▶ Start Test</button>
+        <button id="pause" class="secondary" disabled>Pause</button>
+        <button id="reset" class="secondary">Reset</button>
+      </div>
+      <div class="readings">
+        <div class="reading"><small>Applied Voltage</small><strong><span id="liveVoltage">0</span> <small style="display:inline">kV</small></strong></div>
+        <div class="reading"><small>Breakdown Voltage</small><strong><span id="breakVoltage">—</span> <small style="display:inline">kV</small></strong></div>
+      </div>
+      <div id="status" class="status">Ready. Press “Start Test” to increase the simulated voltage.</div>
+    </div>
+    <div class="panel-title"><span>Voltage vs Time</span><span class="tag">LIVE GRAPH</span></div>
+    <div class="chart-wrap"><canvas id="chart" width="650" height="220"></canvas></div>
+    <div class="panel-title"><span>Test Results</span></div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Run</th><th>Gap (mm)</th><th>Breakdown (kV)</th><th>Status</th></tr></thead>
+        <tbody id="results"><tr><td colspan="4" style="color:#9db1c9">No test completed yet.</td></tr></tbody>
+      </table>
+    </div>
+  </section>
+</main>
+<div class="note"><strong>Important:</strong> This is a visual learning model, not certified test equipment. Breakdown values are randomly simulated for demonstration and must not be used to judge real transformer oil. Real testing must follow the applicable laboratory standard and trained-supervisor procedures.</div>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
+<script>
+(() => {
+  const sceneCanvas = document.getElementById('scene');
+  const voltageSlider = document.getElementById('voltage');
+  const gapSlider = document.getElementById('gap');
+  const voltageText = document.getElementById('voltageText');
+  const gapText = document.getElementById('gapText');
+  const liveVoltage = document.getElementById('liveVoltage');
+  const breakVoltage = document.getElementById('breakVoltage');
+  const statusBox = document.getElementById('status');
+  const startBtn = document.getElementById('start');
+  const pauseBtn = document.getElementById('pause');
+  const resetBtn = document.getElementById('reset');
+  const resultBody = document.getElementById('results');
+  const chartCanvas = document.getElementById('chart');
+  const ctx = chartCanvas.getContext('2d');
+
+  let renderer, scene, camera, controls, oil, spark, electrodeA, electrodeB, animationId;
+  let running = false, paused = false, voltage = 0, time = 0, breakdownAt = null, completed = 0;
+  let history = [], results = [], sparkUntil = 0;
+
+  // Small orbit controller implemented locally, so the scene only depends on Three.js.
+  let dragging = false, lastX = 0, lastY = 0, rotY = 0.45, rotX = -0.12, zoom = 8.8;
+  function init3D() {
+    if (!window.THREE) {
+      sceneCanvas.insertAdjacentHTML('afterend','<p style="padding:12px;color:#ffd49a">3D library could not load. Connect to the internet and refresh.</p>');
+      return;
+    }
+    renderer = new THREE.WebGLRenderer({canvas:sceneCanvas, antialias:true, alpha:true});
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    renderer.setSize(sceneCanvas.clientWidth, sceneCanvas.clientHeight, false);
+    renderer.setClearColor(0x071321, 0);
+    scene = new THREE.Scene();
+    camera = new THREE.PerspectiveCamera(42, sceneCanvas.clientWidth/sceneCanvas.clientHeight, 0.1, 100);
+    camera.position.set(0, 1.2, zoom);
+    scene.add(new THREE.HemisphereLight(0xb9e9ff, 0x172238, 2.1));
+    const key = new THREE.DirectionalLight(0xffffff, 2.4); key.position.set(4,6,5); scene.add(key);
+    const rim = new THREE.PointLight(0x38cfff, 18, 12); rim.position.set(-3,1,2); scene.add(rim);
+
+    const glassMat = new THREE.MeshPhysicalMaterial({color:0x5bcbf5, transparent:true, opacity:.16, roughness:.13, metalness:.05, transmission:.25, thickness:.3, side:THREE.DoubleSide});
+    const edgeMat = new THREE.MeshStandardMaterial({color:0x6aafca, metalness:.65, roughness:.28});
+    const oilMat = new THREE.MeshPhysicalMaterial({color:0x1c9bc4, transparent:true, opacity:.42, roughness:.25, metalness:.08});
+    const chamber = new THREE.Mesh(new THREE.CylinderGeometry(1.55,1.55,3.2,64,1,true), glassMat);
+    chamber.position.y = 0; scene.add(chamber);
+    const top = new THREE.Mesh(new THREE.TorusGeometry(1.55,.055,12,64), edgeMat); top.rotation.x=Math.PI/2; top.position.y=1.6; scene.add(top);
+    const bottom = top.clone(); bottom.position.y=-1.6; scene.add(bottom);
+    oil = new THREE.Mesh(new THREE.CylinderGeometry(1.48,1.48,2.2,64), oilMat);
+    oil.position.y=-.28; scene.add(oil);
+
+    const rodMat = new THREE.MeshStandardMaterial({color:0xb7c9d7, metalness:.92, roughness:.22});
+    const sphereMat = new THREE.MeshStandardMaterial({color:0xdce9f2, metalness:.95, roughness:.17});
+    function makeElectrode(x, y) {
+      const group = new THREE.Group();
+      const rod = new THREE.Mesh(new THREE.CylinderGeometry(.075,.075,1.05,24), rodMat);
+      rod.position.y=.58; group.add(rod);
+      const ball = new THREE.Mesh(new THREE.SphereGeometry(.28,32,24), sphereMat);
+      ball.position.y=0; group.add(ball);
+      group.position.set(x,y,0); scene.add(group); return group;
+    }
+    electrodeA = makeElectrode(-.48,.1);
+    electrodeB = makeElectrode(.48,.1);
+    const base = new THREE.Mesh(new THREE.CylinderGeometry(1.63,1.63,.12,64), new THREE.MeshStandardMaterial({color:0x263e58,metalness:.7,roughness:.35}));
+    base.position.y=-1.68; scene.add(base);
+    spark = new THREE.Group(); scene.add(spark);
+    drawSpark(false);
+    window.addEventListener('resize', resize3D);
+    sceneCanvas.addEventListener('pointerdown', e=>{dragging=true;lastX=e.clientX;lastY=e.clientY;sceneCanvas.setPointerCapture(e.pointerId);});
+    sceneCanvas.addEventListener('pointermove', e=>{if(!dragging)return;rotY+=(e.clientX-lastX)*.008;rotX+=(e.clientY-lastY)*.006;rotX=Math.max(-.8,Math.min(.8,rotX));lastX=e.clientX;lastY=e.clientY;});
+    sceneCanvas.addEventListener('pointerup',()=>dragging=false);
+    sceneCanvas.addEventListener('pointercancel',()=>dragging=false);
+    sceneCanvas.addEventListener('wheel',e=>{zoom=Math.max(5.5,Math.min(13,zoom+e.deltaY*.008));e.preventDefault();},{passive:false});
+    animate3D();
+  }
+  function resize3D(){
+    if(!renderer || !camera) return;
+    const w=sceneCanvas.clientWidth, h=sceneCanvas.clientHeight;
+    renderer.setSize(w,h,false); camera.aspect=w/h; camera.updateProjectionMatrix();
+  }
+  function drawSpark(show) {
+    while(spark.children.length) {
+      const obj=spark.children.pop(); spark.remove(obj);
+      if(obj.geometry)obj.geometry.dispose(); if(obj.material)obj.material.dispose();
+    }
+    if(!show || !window.THREE) return;
+    const points=[];
+    for(let i=0;i<9;i++){
+      const x=-.2+i*.05;
+      points.push(new THREE.Vector3(x, (Math.random()-.5)*.2, .04+(Math.random()-.5)*.12));
+    }
+    const geo=new THREE.BufferGeometry().setFromPoints(points);
+    const line=new THREE.Line(geo,new THREE.LineBasicMaterial({color:0x73f6ff}));
+    spark.add(line);
+    const glow=new THREE.PointLight(0x42eaff,5,2); glow.position.set(0,0,0); spark.add(glow);
+  }
+  function animate3D(){
+    animationId=requestAnimationFrame(animate3D);
+    if(!scene || !renderer) return;
+    const target=new THREE.Vector3(0,0,0);
+    camera.position.x=Math.sin(rotY)*zoom;
+    camera.position.z=Math.cos(rotY)*zoom;
+    camera.position.y=rotX*zoom+1;
+    camera.lookAt(target);
+    electrodeA.position.x=-(.28 + Number(gapSlider.value)*.08);
+    electrodeB.position.x=(.28 + Number(gapSlider.value)*.08);
+    if(time<sparkUntil) {
+      if(!spark.children.length) drawSpark(true);
+      spark.position.set(0,.1,0);
+      spark.visible=true;
+    } else spark.visible=false;
+    renderer.render(scene,camera);
+  }
+
+  function drawChart() {
+    const w=chartCanvas.width, h=chartCanvas.height;
+    ctx.clearRect(0,0,w,h);
+    const pad={l:44,r:14,t:15,b:31}, cw=w-pad.l-pad.r, ch=h-pad.t-pad.b;
+    ctx.strokeStyle='#29425d'; ctx.lineWidth=1; ctx.fillStyle='#9db1c9'; ctx.font='12px Arial';
+    for(let i=0;i<=4;i++){
+      const y=pad.t+ch*i/4;
+      ctx.beginPath();ctx.moveTo(pad.l,y);ctx.lineTo(w-pad.r,y);ctx.stroke();
+      ctx.fillText(String(80-i*20),7,y+4);
+    }
+    for(let i=0;i<=5;i++){
+      const x=pad.l+cw*i/5;
+      ctx.beginPath();ctx.moveTo(x,pad.t);ctx.lineTo(x,h-pad.b);ctx.stroke();
+      ctx.fillText(String(Math.round((history.length||1)*i/5)),x-4,h-10);
+    }
+    ctx.fillText('Voltage (kV)',pad.l,11);
+    if(history.length>1){
+      ctx.strokeStyle='#43d9ff';ctx.lineWidth=3;ctx.beginPath();
+      history.forEach((v,i)=>{
+        const x=pad.l+cw*i/Math.max(1,history.length-1), y=pad.t+ch*(1-v/80);
+        if(i===0)ctx.moveTo(x,y);else ctx.lineTo(x,y);
+      });
+      ctx.stroke();
+    }
+  }
+  function setStatus(message, warn=false){statusBox.textContent=message;statusBox.classList.toggle('warn',warn);}
+  function updateReadings(){
+    voltageText.textContent=voltage.toFixed(0);liveVoltage.textContent=voltage.toFixed(0);
+    gapText.textContent=Number(gapSlider.value).toFixed(1);
+    voltageSlider.value=voltage;
+    drawChart();
+  }
+  function finishTest(){
+    running=false;paused=false;pauseBtn.disabled=true;pauseBtn.textContent='Pause';startBtn.disabled=false;
+    completed++;
+    breakVoltage.textContent=breakdownAt.toFixed(1);
+    results.unshift({run:completed,gap:Number(gapSlider.value).toFixed(1),kv:breakdownAt.toFixed(1),status:'Breakdown'});
+    resultBody.innerHTML=results.slice(0,6).map(r=>`<tr><td>${r.run}</td><td>${r.gap}</td><td>${r.kv}</td><td style="color:#ffd49a">${r.status}</td></tr>`).join('');
+    drawSpark(true);sparkUntil=time+1.2;
+    setStatus('Breakdown detected in the simulation at '+breakdownAt.toFixed(1)+' kV. Reset to run another test.',true);
+  }
+  function tick(){
+    if(!running || paused) return;
+    time+=.12;
+    voltage=Math.min(80,voltage+.7);
+    // Demonstration-only threshold; not a physical prediction.
+    const gap=Number(gapSlider.value);
+    const threshold=22 + gap*8 + (Math.random()-.5)*5;
+    if(voltage>=threshold){
+      voltage=threshold; history.push(voltage); updateReadings(); finishTest(); return;
+    }
+    history.push(voltage);
+    if(history.length>90)history.shift();
+    updateReadings();
+    setStatus('Voltage is increasing… no breakdown detected yet.');
+    setTimeout(tick,90);
+  }
+  startBtn.addEventListener('click',()=>{
+    if(running)return;
+    if(breakdownAt!==null){resetTest();}
+    running=true;paused=false;startBtn.disabled=true;pauseBtn.disabled=false;
+    setStatus('Test running. Voltage is increasing in the virtual model.');
+    tick();
+  });
+  pauseBtn.addEventListener('click',()=>{
+    if(!running)return;
+    paused=!paused;pauseBtn.textContent=paused?'Resume':'Pause';
+    if(paused)setStatus('Test paused. Press Resume to continue.');
+    else {setStatus('Test resumed.');tick();}
+  });
+  resetBtn.addEventListener('click',resetTest);
+  function resetTest(){
+    running=false;paused=false;voltage=0;time=0;breakdownAt=null;history=[];sparkUntil=0;
+    breakVoltage.textContent='—';startBtn.disabled=false;pauseBtn.disabled=true;pauseBtn.textContent='Pause';
+    drawSpark(false);updateReadings();setStatus('Ready. Press “Start Test” to increase the simulated voltage.');
+  }
+  voltageSlider.addEventListener('input',()=>{
+    if(running)return;
+    voltage=Number(voltageSlider.value);history.push(voltage);if(history.length>90)history.shift();
+    updateReadings();setStatus('Manual voltage selected. Press Start Test to run the simulation.');
+  });
+  gapSlider.addEventListener('input',()=>{gapText.textContent=Number(gapSlider.value).toFixed(1);});
+  window.addEventListener('resize',drawChart);
+  init3D(); updateReadings();
+})();
+</script>
 </body>
 </html>
